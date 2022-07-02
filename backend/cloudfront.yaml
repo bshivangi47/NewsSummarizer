@@ -1,0 +1,384 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+
+  TopicName:
+    Type: String
+    Description: This is cloud project
+    Default: cloud project
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicReadWrite
+      BucketName: news-bucket-csci5409
+      VersioningConfiguration:
+        Status: Enabled
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:PutObjectTagging
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref S3Bucket
+                - /*
+      Bucket: !Ref S3Bucket
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: cloud-csci5409-proj
+      FifoTopic: false
+      Subscription:
+        - Endpoint: "sharad99kr@gmail.com"
+          Protocol: "email"
+      TopicName : cloud-csci5409-proj
+
+  dbInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        DBClusterIdentifier: !Ref RDS
+
+        DBInstanceClass: db.t2.small
+
+        Engine: aurora
+        EngineVersion: 5.6.10a
+  RDS:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DatabaseName: News_summarizer
+      DBClusterIdentifier: CloudProject5
+      DBSubnetGroupName: !Ref subnetgroup
+      DeletionProtection: false
+      Engine: aurora
+      EngineMode: provisioned
+      EngineVersion: 5.6.10a
+      MasterUsername: CloudProject
+      MasterUserPassword: !Join [ '', [ '{{resolve:secretsmanager:', !Ref MySQLSecret, ':SecretString:password}}' ] ]
+
+  subnetgroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for aurora database
+      DBSubnetGroupName: cloud-project-db-subnet-group-news-four
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      CidrBlock: "10.0.0.0/16"
+      # 65536
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud Project"
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: "10.0.0.0/24" 
+      # 10.0.0.0 - 10.0.0.255
+      # 256
+      AvailabilityZone: "us-east-1a"
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud-Project-Public-Subnet-1"
+      VpcId:
+        Ref: "VPC"
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: "10.0.1.0/24"
+      # 256
+      # 10.0.1.0 -10.0.255.0
+      AvailabilityZone: "us-east-1b"
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud-Project-Public-Subnet-2"
+      VpcId:
+        Ref: "VPC"
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: "10.0.2.0/24"
+      # 256
+      AvailabilityZone: "us-east-1a"
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud-Project-Private-Subnet-2"
+      VpcId:
+        Ref: "VPC"
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: "10.0.3.0/24"
+      # 256
+      AvailabilityZone: "us-east-1b"
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud-Project-Private-Subnet-2"
+      VpcId:
+        Ref: "VPC"
+  InternetGatewayConnectivity:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+        -
+          Key: "Name"
+          Value: "Cloud-Project-Internet-Gateway"
+  PublicInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      InternetGatewayId: !Ref InternetGatewayConnectivity
+      
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: "VPC"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: PublicInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayConnectivity
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: "VPC"
+
+  PrivateRoute1:            
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt ElasticIPAddress.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      
+  ElasticIPAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: test1
+      Subnets: 
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet1
+      SecurityGroups:
+        - !GetAtt SecurityGroupLoadBalancer.GroupId
+      Tags:
+        - Key: Name
+          Value: test1
+    DependsOn: PublicRoute
+  SecurityGroupLoadBalancer:
+
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      # VpcId: vpc-05c52d4b717976427
+      VpcId:
+        !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: test-default-1
+      VpcId: !Ref VPC
+
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '20'
+      Targets:
+        - Id:
+            Ref: LaunchingServer
+          Port: 3000
+      UnhealthyThresholdCount: 3
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  LaunchingServer:
+
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType:  't2.micro'
+      KeyName: internal-aws
+      ImageId: ami-02ae2432229b9d6b4
+      NetworkInterfaces:
+        - DeleteOnTermination: true
+          Description: Primary network interface
+          DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnet2
+          GroupSet:
+            - !Ref SecurityGroup
+          AssociatePublicIpAddress: true
+
+  SecurityGroup:
+
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      VpcId:
+        !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3000
+        ToPort: 3000
+        CidrIp: 0.0.0.0/0
+
+  lambda:
+
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        S3Bucket: cloud-project-lambda-us-east-1
+        S3Key: lambda_function.py.zip
+      Description: String
+      FunctionName: test
+      MemorySize: 256 
+      Timeout: 15
+      Handler: lambda_function.lambda_handler
+      Role: arn:aws:iam::050670689537:role/lambda-admin
+      Runtime: python3.9
+
+
+  version:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref lambda
+
+  asyncconfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+
+      FunctionName: test
+      MaximumEventAgeInSeconds: 300
+      MaximumRetryAttempts: 2
+      Qualifier: !GetAtt version.Version
+
+  
+
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      ApiKeySourceType: HEADER
+      Description: An API Gateway for Lambda APIs
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: Test
+
+  ProxyResource:
+    
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: '{proxy+}'
+
+  ProxyResourceANY:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ProxyResource
+      HttpMethod: GET
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: GET
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambda.Arn}/invocations'
+
+  MySQLSecretKey:
+    Type: AWS::KMS::Key
+    Properties:
+      KeyPolicy:
+        Statement:
+          - Sid: "Enable IAM User Permissions"
+            Effect: "Allow"
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+  MySQLSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      KmsKeyId: !Ref MySQLSecretKey
+      GenerateSecretString:
+        SecretStringTemplate: !Join [ '', [ '{"username": "', CloudProject , '"}' ] ]
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
